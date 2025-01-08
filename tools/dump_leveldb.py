@@ -53,7 +53,7 @@ def process_level_db(
 
     # Initialize extracted_values to avoid UnboundLocalError
     extracted_values = []
-    
+        
     try:
         logging.info("Starting LevelDB processing.")
         logging.info(f"Input path: {input_path}")

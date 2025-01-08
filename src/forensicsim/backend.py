@@ -47,7 +47,8 @@ def parse_db(
     # Open raw access to a LevelDB and deserialize the records.
     wrapper = ccl_chromium_indexeddb.WrappedIndexDB(filepath, blobpath)
     extracted_values = []
-
+    failed_records = []  # <-- new structure to hold records that fail
+    
     # Initialize counters
     record_count = 0
     skipped_records = 0
@@ -100,14 +101,15 @@ def parse_db(
                         records_per_object_store += 1
 
                         # Collect raw records for JSON output
-                        extracted_values.append({
+                        data_dict = {
                             "key": record.key.raw_key,
                             "value": record.value,
                             "origin_file": record.origin_file,
                             "store": obj_store_name,
                             "state": None,
                             "seq": None,
-                        })
+                        }
+                        extracted_values.append(data_dict)
 
                         if debug_log:
                             debug_log.write(f"[DEBUG] Record {record_count} processed successfully.\n")
@@ -118,15 +120,18 @@ def parse_db(
                             
                     except Exception as e:
                         errors += 1
-                        if error_log:
-                            error_log.write(f"[ERROR] Error processing record {record_count}: {e}\n")
-
-                if debug_log:
-                    debug_log.write(f"[INFO] Object store '{obj_store_name}': {records_per_object_store} records processed.\n")
-
+                        failed_data_dict = {
+                            "key": record.key.raw_key,
+                            "origin_file": getattr(record, "origin_file", "N/A"),
+                            "store": obj_store_name,
+                            "error": str(e),
+                            "value_fragment": repr(record.value)[:500],  # partial snippet
+                        }
+                        failed_records.append(failed_data_dict)
     finally:
         # Final log summary
         if log_paths:
+            debug_log.write(f"[INFO] parse_db finished:\n")
             debug_log.write(f"[INFO] Total records processed: {record_count}\n")
             debug_log.write(f"[INFO] Skipped records: {skipped_records}\n")
             debug_log.write(f"[INFO] Errors encountered: {errors}\n")
@@ -136,6 +141,12 @@ def parse_db(
         if raw_log:
             raw_log.close()        
 
+    # **Optional**: Dump failed_records to a separate JSON file for analysis
+    if failed_records and log_paths and 'debug_log' in log_paths:
+        unrecognized_path = Path(log_paths['debug_log']).parent / "unrecognized.json"
+        with open(unrecognized_path, "w", encoding="utf-8") as f:
+            json.dump(failed_records, f, indent=4, default=str, ensure_ascii=False)
+            
     return extracted_values
 
 
