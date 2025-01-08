@@ -43,11 +43,6 @@ def parse_db(
     raw_dump: bool = False,
     log_paths: Optional[dict] = None  # Pass log paths
 ) -> list[dict[str, Any]]:
-    # Open log files if provided
-    raw_log = open(log_paths['raw_log'], "a") if log_paths else None
-    debug_log = open(log_paths['debug_log'], "a") if log_paths else None
-    error_log = open(log_paths['error_log'], "a") if log_paths else None
-    
     
     # Open raw access to a LevelDB and deserialize the records.
     wrapper = ccl_chromium_indexeddb.WrappedIndexDB(filepath, blobpath)
@@ -58,6 +53,14 @@ def parse_db(
     skipped_records = 0
     errors = 0
 
+    # Open debug log (always required)
+    debug_log = open(log_paths['debug_log'], "w", encoding="utf-8") if log_paths else None
+
+    # Open raw_log **only if raw_dump=True**
+    raw_log = None
+    if raw_dump and log_paths:
+        raw_log = open(log_paths['raw_log'], "w", encoding="utf-8")
+        
     try:
         if raw_dump and log_paths:
             raw_log = open(log_paths['raw_log'], "w", encoding="utf-8")
@@ -115,7 +118,8 @@ def parse_db(
                         # Write to raw_log only if raw_dump is enabled
                         if raw_dump and raw_log:
                             json.dump(record.value, raw_log, indent=4, default=str, ensure_ascii=False)
-
+                            raw_log.write("\n")  # Ensure newline between records
+                            
                     except Exception as e:
                         errors += 1
                         if error_log:

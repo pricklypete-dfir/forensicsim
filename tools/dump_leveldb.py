@@ -8,12 +8,12 @@ import logging
 from forensicsim.backend import parse_db, write_results_to_json
 from forensicsim.consts import DUMP_HEADER
 
+RAW_DUMP_ENABLED = False
 
 def setup_logs(output_dir):
     os.makedirs(output_dir, exist_ok=True)
     
     debug_log = Path(output_dir) / "debug.log"
-    raw_log = Path(output_dir) / "raw_data.json"
     error_log = Path(output_dir) / "error.log"
 
     # Configure logging to file only
@@ -42,12 +42,18 @@ def process_level_db(
     blob_path: Optional[Path] = None,
     raw_dump: bool = False,
 ) -> None:
+    global RAW_DUMP_ENABLED #use the global variable
+    RAW_DUMP_ENABLED = raw_dump
+    
     logs = setup_logs(output_path.parent)
     error_logger = logs["error_logger"]
 
     start_time = time.time()
     skipped_records = 0
     empty_stores = 0
+
+    if raw_dump:
+        RAW_DUMP_ENABLED=True
 
     try:
         logging.info("Starting LevelDB processing.")
@@ -56,27 +62,34 @@ def process_level_db(
         logging.info(f"Blob path: {blob_path if blob_path else 'None'}")
         logging.info(f"Raw dump mode: {raw_dump}")
 
-        with open(logs["raw_log"], "w") as raw_log:
-            # Parse database
-            extracted_values = parse_db(
-                input_path,
-                blob_path,
-                filter_db_results=False,
-                raw_dump=raw_dump,
-                log_paths=logs,
-            )
+        # Open raw_log only if RAW_DUMP_ENABLED is True
+        raw_log = None
+        if RAW_DUMP_ENABLED:
+            raw_log = open(Path(output_path.parent) / "raw_data.json", "w")
+            
+        # Parse database
+        extracted_values = parse_db(
+            input_path,
+            blob_path,
+            filter_db_results=False,
+            raw_dump=raw_dump,
+            log_paths=logs,
+        )
 
-            # Write raw dump
-            if raw_dump:
-                for record in extracted_values:
-                    raw_log.write(f"{record}\n")
-                logging.info(f"Raw records written to raw_data.json.")
-            else:
-                write_results_to_json(extracted_values, output_path)
-                logging.info(f"Processed data written to {output_path}.")
+        # Write raw dump if enabled
+        if RAW_DUMP_ENABLED and raw_log:
+            for record in extracted_values:
+                raw_log.write(f"{record}\n")
+            logging.info(f"Raw records written to raw_data.json.")
+            raw_log.close()  # Close the raw log properly
 
+        else:
+            # Write structured JSON if not raw_dump
+            write_results_to_json(extracted_values, output_path)
+            logging.info(f"Processed data written to {output_path}.")
+            
     except Exception as e:
-        error_logger.error(traceback.format_exc())
+        error_logger.error(traceback.format_exc(e))
 
     finally:
         end_time = time.time()
@@ -115,6 +128,7 @@ def process_level_db(
     default=False,
     help="Dump raw records without processing into structured JSON.",
 )
+
 def process_cmd(
     filepath: Path, outputpath: Path, blobpath: Optional[Path] = None, raw_dump: bool = False
 ) -> None:
