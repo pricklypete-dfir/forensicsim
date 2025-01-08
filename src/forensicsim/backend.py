@@ -61,10 +61,7 @@ def parse_db(
     if raw_dump and log_paths:
         raw_log = open(log_paths['raw_log'], "w", encoding="utf-8")
         
-    try:
-        if raw_dump and log_paths:
-            raw_log = open(log_paths['raw_log'], "w", encoding="utf-8")
-        
+    try:        
         for db_info in wrapper.database_ids:
             if db_info.dbid_no is None:
                 continue
@@ -118,7 +115,6 @@ def parse_db(
                         # Write to raw_log only if raw_dump is enabled
                         if raw_dump and raw_log:
                             json.dump(record.value, raw_log, indent=4, default=str, ensure_ascii=False)
-                            raw_log.write("\n")  # Ensure newline between records
                             
                     except Exception as e:
                         errors += 1
@@ -129,15 +125,16 @@ def parse_db(
                     debug_log.write(f"[INFO] Object store '{obj_store_name}': {records_per_object_store} records processed.\n")
 
     finally:
-        # Write full raw data JSON at the end
-        with open(log_paths['raw_log'], "w", encoding="utf-8") as raw_log:
-            json.dump(extracted_values, raw_log, indent=4, default=str, ensure_ascii=False)
         # Final log summary
         if log_paths:
-            with open(log_paths['debug_log'], "a", encoding="utf-8") as debug_log:
-                debug_log.write(f"[INFO] Total records processed: {record_count}\n")
-                debug_log.write(f"[INFO] Skipped records: {skipped_records}\n")
-                debug_log.write(f"[INFO] Errors encountered: {errors}\n")
+            debug_log.write(f"[INFO] Total records processed: {record_count}\n")
+            debug_log.write(f"[INFO] Skipped records: {skipped_records}\n")
+            debug_log.write(f"[INFO] Errors encountered: {errors}\n")
+            debug_log.close()
+        
+        # Close raw_log if it was opened
+        if raw_log:
+            raw_log.close()        
 
     return extracted_values
 

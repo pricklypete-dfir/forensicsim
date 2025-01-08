@@ -30,7 +30,6 @@ def setup_logs(output_dir):
     
     return {
         "debug_log": debug_log,
-        "raw_log": raw_log,
         "error_log": error_log,
         "error_logger": error_logger,
     }
@@ -52,9 +51,9 @@ def process_level_db(
     skipped_records = 0
     empty_stores = 0
 
-    if raw_dump:
-        RAW_DUMP_ENABLED=True
-
+    # Initialize extracted_values to avoid UnboundLocalError
+    extracted_values = []
+    
     try:
         logging.info("Starting LevelDB processing.")
         logging.info(f"Input path: {input_path}")
@@ -89,7 +88,7 @@ def process_level_db(
             logging.info(f"Processed data written to {output_path}.")
             
     except Exception as e:
-        error_logger.error(traceback.format_exc(e))
+        error_logger.error(traceback.format_exc())
 
     finally:
         end_time = time.time()
