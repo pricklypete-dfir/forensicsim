@@ -45,7 +45,7 @@ def setup_logs(output_dir):
         level=logging.DEBUG,  # Log all levels (DEBUG, INFO, WARNING, ERROR)
         format="%(asctime)s - %(levelname)s - %(message)s",
         handlers=[
-            logging.FileHandler(debug_log, mode="w"),  # Write logs to debug.log
+            logging.FileHandler(debug_log, mode="a"),  # Write logs to debug.log
             logging.StreamHandler()  # Keep logs visible in terminal
         ],
     )
@@ -57,9 +57,9 @@ def setup_logs(output_dir):
     error_logger.addHandler(error_handler)
     
     return {
-        "debug_log": Path(output_dir) / "debug.log",
-        "raw_log": Path(output_dir) / "raw_data.json",
-        "error_log": Path(output_dir) / "error.log",
+        "debug_log": debug_log,
+        "raw_log": raw_log,
+        "error_log": error_log,
         "error_logger": error_logger,
     }
 
@@ -78,7 +78,7 @@ def process_level_db(
     with open(logs["raw_log"], "w") as raw_log:
         start_time = time.time()
         try:
-            logging.info(f"INFO: Starting LevelDB processing.\n")
+            logging.info(f"Starting LevelDB processing.\n")
             logging.info(f"Input path: {input_path}\n")
             logging.info(f"Output path: {output_path}\n")
             logging.info(f"Blob path: {blob_path if blob_path else 'None'}\n")
@@ -92,7 +92,7 @@ def process_level_db(
                 raw_dump=raw_dump,
             )
 
-            logging.info(f"INFO: Database parsed successfully.\n")
+            logging.info(f"Database parsed successfully.\n")
             logging.info(f"Number of records extracted: {len(extracted_values)}\n")
             
             logging.info(f"Skipped records: {skipped_records}")
@@ -102,7 +102,7 @@ def process_level_db(
             if raw_dump:
                 for record in extracted_values:
                     raw_log.write(f"{record}\n")
-                logging.info(f"INFO: Raw records written to raw_data.json.\n")
+                logging.info(f"Raw records written to raw_data.json.\n")
             else:
                 # Write processed results to the output JSON file
                 write_results_to_json(extracted_values, output_path)
@@ -111,7 +111,6 @@ def process_level_db(
         except Exception as e:
             #error_logger.error(f"ERROR: {str(e)}\n")
             error_logger.error(traceback.format_exc())
-            error_logger.error(f"ERROR: An exception occurred. Check error.log.\n")
 
         finally:
             end_time = time.time()

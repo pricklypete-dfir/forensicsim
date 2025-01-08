@@ -25,11 +25,17 @@ SOFTWARE.
 import json
 from pathlib import Path
 from typing import Any, Optional
-
+import time
+import logging
 from ccl_chromium_reader import (
     ccl_chromium_indexeddb,
     ccl_chromium_localstorage,
     ccl_chromium_sessionstorage,
+)
+
+logging.basicConfig(
+    level=logging.DEBUG,
+    format="%(asctime)s - %(levelname)s - %(message)s",
 )
 
 TEAMS_DB_OBJECT_STORES = ["replychains", "conversations", "people", "buddylist"]
@@ -53,6 +59,11 @@ def parse_db(
     raw_log = open(log_paths['raw_log'], "w") if log_paths else None
     debug_log = open(log_paths['debug_log'], "w") if log_paths else None
 
+    #initialize logging variables
+    record_count = 0
+    skipped_records = 0
+    errors = 0
+
     try:
         for db_info in wrapper.database_ids:
             if db_info.dbid_no is None:
@@ -66,22 +77,26 @@ def parse_db(
                 if obj_store_name in TEAMS_DB_OBJECT_STORES or not filter_db_results:
                     obj_store = db[obj_store_name]
                     records_per_object_store = 0
+                if obj_store_name not in TEAMS_DB_OBJECT_STORES:
+                    logging.warning(f"Unknown object store encountered: {obj_store_name}")
 
-                    for record in obj_store.iterate_records():
+                start_time = time.time()
+                for record in obj_store.iterate_records():
+                    try:
+                        
+                        record_count += 1
+                        logging.debug(f"Processing record {record_count}: Key={record.key.raw_key}")
+                        
+                        if "unknown_field" in record.value:
+                            logging.warning(f"Record {record_count} contains unknown field: {record.value['unknown_field']}")
+                        
                         if not hasattr(record, "value") or record.value is None:
+                            skipped_records += 1
+                            logging.warning(f"Skipped empty record {record_count}: Key={record.key.raw_key}")
                             continue
                         if not hasattr(record, "origin_file") or record.origin_file is None:
                             continue
                         records_per_object_store += 1
-
-                        # Handle raw dump
-                        if raw_dump:
-                            log_entry = f"Raw Record: {record}\n"
-                            if raw_log:
-                                raw_log.write(log_entry)  # Write to file
-                            else:
-                                print(log_entry)  # Fallback to console
-                            continue  # Skip adding to extracted_values
 
                         # Process structured data
                         state = None
@@ -94,15 +109,33 @@ def parse_db(
                             "state": state,
                             "seq": seq,
                         })
-                    if debug_log:
-                        debug_log.write(
-                            f"{obj_store_name} {db.name} (Records: {records_per_object_store})\n"
-                        )
+                        
+                        # Log the record value for debugging
+                        logging.debug(f"Record {record_count} Value: {record.value}")
+                        
+                        logging.debug(f"Record {record_count} processed in {end_time - start_time:.4f} seconds.")
+                    except Exception as e:
+                        errors += 1
+                        logging.error(f"Error processing record {record_count}: {e}")
+                if debug_log:
+                    debug_log.write(
+                        f"{obj_store_name} {db.name} (Records: {records_per_object_store})\n"
+                    )
+                if raw_dump:
+                    logging.info(f"{record}\n")
+                    logging.debug(f"Raw Record {record_count}: {record}")
+                    continue  # Skip structured processing
+                logging.info(f"Object store {obj_store_name}: {records_per_object_store} records processed.")
+                end_time = time.time()
     finally:
         if raw_log:
             raw_log.close()
         if debug_log:
             debug_log.close()
+
+    logging.info(f"Total records processed: {record_count}")
+    logging.info(f"Skipped records: {skipped_records}")
+    logging.info(f"Errors encountered: {errors}")
 
     return extracted_values
 
