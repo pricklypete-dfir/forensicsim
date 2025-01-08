@@ -370,13 +370,31 @@ def process_db(
     output_path: Path,
     blob_path: Optional[Path] = None,
     filter_db_results: Optional[bool] = True,
+    raw_dump: bool = False  # Pass raw_dump argument
 ) -> None:
+    # Set up logs
+    logs = setup_logs(output_path.parent)
+
+    # Validate paths
     if not input_path.parts[-1].endswith(".leveldb"):
         raise ValueError(f"Expected a leveldb folder. Path: {input_path}")
-
     if blob_path is not None and not blob_path.parts[-1].endswith(".blob"):
         raise ValueError(f"Expected a .blob folder. Path: {blob_path}")
 
-    extracted_values = parse_db(input_path, blob_path, filter_db_results)
+    # Parse raw or processed data
+    extracted_values = parse_db(
+        input_path, blob_path, filter_db_results, raw_dump, log_paths=logs
+    )
+
+    # If raw_dump is enabled, skip structured output
+    if raw_dump:
+        return
+
+    # Parse and write structured data
     parsed_records = parse_records(extracted_values)
     write_results_to_json(parsed_records, output_path)
+
+    # Log summary
+    with open(logs["debug_log"], "a") as debug_log:
+        debug_log.write(f"[INFO] Processed {len(parsed_records)} records successfully.\n")
+

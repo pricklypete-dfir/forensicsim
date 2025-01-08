@@ -41,56 +41,69 @@ def parse_db(
     filepath: Path,
     blobpath: Optional[Path] = None,
     filter_db_results: Optional[bool] = True,
-    raw_dump: bool = False  # New parameter
+    raw_dump: bool = False,  # New parameter
+    log_paths: Optional[dict] = None  # Pass log paths
 ) -> list[dict[str, Any]]:
     # Open raw access to a LevelDB and deserialize the records.
 
     wrapper = ccl_chromium_indexeddb.WrappedIndexDB(filepath, blobpath)
-
     extracted_values = []
 
-    for db_info in wrapper.database_ids:
-        # Skip databases without a valid dbid_no
-        if db_info.dbid_no is None:
-            continue
+    # Open log files if provided
+    raw_log = open(log_paths['raw_log'], "w") if log_paths else None
+    debug_log = open(log_paths['debug_log'], "w") if log_paths else None
 
-        db = wrapper[db_info.dbid_no]
-
-        for obj_store_name in db.object_store_names:
-            # Skip empty object stores
-            if obj_store_name is None:
+    try:
+        for db_info in wrapper.database_ids:
+            if db_info.dbid_no is None:
                 continue
-            if obj_store_name in TEAMS_DB_OBJECT_STORES or filter_db_results is False:
-                obj_store = db[obj_store_name]
-                records_per_object_store = 0
-                for record in obj_store.iterate_records():
-                    # skip empty records
-                    if not hasattr(record, "value") or record.value is None:
-                        continue
-                    # skip records without file origin
-                    if not hasattr(record, "origin_file") or record.origin_file is None:
-                        continue
-                    records_per_object_store += 1
 
-                    # Handle raw dump
-                    if raw_dump:
-                        print(f"Raw Record: {record}")
-                        continue  # Skip adding to extracted_values in raw_dump mode
+            db = wrapper[db_info.dbid_no]
 
-                    # TODO: Fix None values
-                    state = None
-                    seq = None
-                    extracted_values.append({
-                        "key": record.key.raw_key,
-                        "value": record.value,
-                        "origin_file": record.origin_file,
-                        "store": obj_store_name,
-                        "state": state,
-                        "seq": seq,
-                    })
-                print(
-                    f"{obj_store_name} {db.name} (Records: {records_per_object_store})"
-                )
+            for obj_store_name in db.object_store_names:
+                if obj_store_name is None:
+                    continue
+                if obj_store_name in TEAMS_DB_OBJECT_STORES or not filter_db_results:
+                    obj_store = db[obj_store_name]
+                    records_per_object_store = 0
+
+                    for record in obj_store.iterate_records():
+                        if not hasattr(record, "value") or record.value is None:
+                            continue
+                        if not hasattr(record, "origin_file") or record.origin_file is None:
+                            continue
+                        records_per_object_store += 1
+
+                        # Handle raw dump
+                        if raw_dump:
+                            log_entry = f"Raw Record: {record}\n"
+                            if raw_log:
+                                raw_log.write(log_entry)  # Write to file
+                            else:
+                                print(log_entry)  # Fallback to console
+                            continue  # Skip adding to extracted_values
+
+                        # Process structured data
+                        state = None
+                        seq = None
+                        extracted_values.append({
+                            "key": record.key.raw_key,
+                            "value": record.value,
+                            "origin_file": record.origin_file,
+                            "store": obj_store_name,
+                            "state": state,
+                            "seq": seq,
+                        })
+                    if debug_log:
+                        debug_log.write(
+                            f"{obj_store_name} {db.name} (Records: {records_per_object_store})\n"
+                        )
+    finally:
+        if raw_log:
+            raw_log.close()
+        if debug_log:
+            debug_log.close()
+
     return extracted_values
 
 

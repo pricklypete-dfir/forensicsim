@@ -24,22 +24,62 @@ SOFTWARE.
 
 from pathlib import Path
 from typing import Optional
-
+import os
 import click
-
 from forensicsim.backend import write_results_to_json
 from forensicsim.consts import DUMP_HEADER
 from forensicsim.parser import parse_db
 
 
-def process_level_db(
-    input_path: Path, output_path: Path, blob_path: Optional[Path] = None
-) -> None:
-    # convert the database to a python list with nested dictionaries
-    extracted_values = parse_db(input_path, blob_path, filter_db_results=False, raw_dump=True)
 
-    # write the output to a json file
-    write_results_to_json(extracted_values, output_path)
+def setup_logs(output_dir):
+    # Ensure output directory exists
+    os.makedirs(output_dir, exist_ok=True)
+    return {
+        "debug_log": Path(output_dir) / "debug.log",
+        "raw_log": Path(output_dir) / "raw_data.json",
+        "error_log": Path(output_dir) / "error.log",
+    }
+
+
+def process_level_db(
+    input_path: Path,
+    output_path: Path,
+    blob_path: Optional[Path] = None,
+    raw_dump: bool = False,
+) -> None:
+    # Setup logs
+    logs = setup_logs(output_path.parent)
+
+    # Initialize log files
+    with open(logs["debug_log"], "w") as debug_log, \
+         open(logs["raw_log"], "w") as raw_log, \
+         open(logs["error_log"], "w") as error_log:
+
+        try:
+            # Parse the database
+            extracted_values = parse_db(
+                input_path,
+                blob_path,
+                filter_db_results=False,
+                raw_dump=raw_dump,
+            )
+
+            # Handle raw_dump case
+            if raw_dump:
+                # Write raw data to raw_log instead of terminal
+                for record in extracted_values:
+                    raw_log.write(f"{record}\n")
+            else:
+                # Write processed results to the output JSON file
+                write_results_to_json(extracted_values, output_path)
+
+        except Exception as e:
+            # Capture errors in the error log
+            error_log.write(f"ERROR: {str(e)}\n")
+
+        finally:
+            debug_log.write("Processing complete.\n")
 
 
 @click.command()
@@ -68,11 +108,18 @@ def process_level_db(
     required=False,
     help="File path to the .blob folder of the IndexedDB.",
 )
+@click.option(
+    "--raw-dump",
+    is_flag=True,
+    default=False,
+    help="Dump raw records without processing into structured JSON.",
+)
 def process_cmd(
-    filepath: Path, outputpath: Path, blobpath: Optional[Path] = None
+    filepath: Path, outputpath: Path, blobpath: Optional[Path] = None, raw_dump: bool = False
 ) -> None:
     click.echo(DUMP_HEADER)
-    process_level_db(filepath, outputpath, blobpath)
+    process_level_db(filepath, outputpath, blobpath, raw_dump)
+
 
 
 if __name__ == "__main__":
