@@ -36,7 +36,6 @@ TEAMS_DB_OBJECT_STORES = ["replychains", "conversations", "people", "buddylist"]
 
 ENCODING = "iso-8859-1"
 
-
 def parse_db(
     filepath: Path,
     blobpath: Optional[Path] = None,
@@ -44,20 +43,22 @@ def parse_db(
     raw_dump: bool = False,
     log_paths: Optional[dict] = None  # Pass log paths
 ) -> list[dict[str, Any]]:
+    # Open log files if provided
+    raw_log = open(log_paths['raw_log'], "a") if log_paths else None
+    debug_log = open(log_paths['debug_log'], "a") if log_paths else None
+    error_log = open(log_paths['error_log'], "a") if log_paths else None
+    
+    
     # Open raw access to a LevelDB and deserialize the records.
 
     wrapper = ccl_chromium_indexeddb.WrappedIndexDB(filepath, blobpath)
     extracted_values = []
 
-    # Open log files if provided
-    raw_log = open(log_paths['raw_log'], "a") if log_paths else None
-    debug_log = open(log_paths['debug_log'], "a") if log_paths else None
-    error_log = open(log_paths['error_log'], "a") if log_paths else None
-
     # Initialize counters
     record_count = 0
     skipped_records = 0
     errors = 0
+    extracted_values = []  # Initialize to avoid UnboundLocalError
 
     try:
         for db_info in wrapper.database_ids:
@@ -120,19 +121,13 @@ def parse_db(
 
     finally:
         # Write full raw data JSON at the end
-        if raw_dump and raw_log:
+        with open(log_paths['raw_log'], "w", encoding="utf-8") as raw_log:
             json.dump(extracted_values, raw_log, indent=4, default=str, ensure_ascii=False)
-            raw_log.close()
+        # Final log summary
         if debug_log:
-            debug_log.close()
-        if error_log:
-            error_log.close()
-
-    # Final log summary
-    if debug_log:
-        debug_log.write(f"[INFO] Total records processed: {record_count}\n")
-        debug_log.write(f"[INFO] Skipped records: {skipped_records}\n")
-        debug_log.write(f"[INFO] Errors encountered: {errors}\n")
+            debug_log.write(f"[INFO] Total records processed: {record_count}\n")
+            debug_log.write(f"[INFO] Skipped records: {skipped_records}\n")
+            debug_log.write(f"[INFO] Errors encountered: {errors}\n")
 
     return extracted_values
 
@@ -174,5 +169,5 @@ def write_results_to_json(data: list[dict[str, Any]], outputpath: Path) -> None:
         with open(outputpath, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=4, default=str, ensure_ascii=False)
     except Exception as e:
-        logging.error(f"Failed to write results.json: {str(e)}")
+        error_log.write(f"Failed to write results.json: {str(e)}")
 
