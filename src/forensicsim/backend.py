@@ -50,9 +50,9 @@ def parse_db(
     extracted_values = []
 
     # Open log files if provided
-    raw_log = open(log_paths['raw_log'], "w") if log_paths else None
-    debug_log = open(log_paths['debug_log'], "w") if log_paths else None
-    error_log = open(log_paths['error_log'], "w") if log_paths else None
+    raw_log = open(log_paths['raw_log'], "a") if log_paths else None
+    debug_log = open(log_paths['debug_log'], "a") if log_paths else None
+    error_log = open(log_paths['error_log'], "a") if log_paths else None
 
     # Initialize counters
     record_count = 0
@@ -69,8 +69,13 @@ def parse_db(
             for obj_store_name in db.object_store_names:
                 if obj_store_name is None:
                     continue
-                if obj_store_name not in TEAMS_DB_OBJECT_STORES and filter_db_results:
-                    continue  # Skip unknown stores
+
+                # Log object stores dynamically
+                debug_log.write(f"Processing object store: {obj_store_name}")
+
+                # Allow all object stores, even unknown ones
+                if obj_store_name not in TEAMS_DB_OBJECT_STORES:
+                    debug_log.write(f"Unknown object store encountered: {obj_store_name}")
 
                 obj_store = db[obj_store_name]
                 records_per_object_store = 0
@@ -165,9 +170,9 @@ def parse_sessionstorage(filepath: Path) -> list[dict[str, Any]]:
 
 
 def write_results_to_json(data: list[dict[str, Any]], outputpath: Path) -> None:
-    # Dump messages into a json file
     try:
         with open(outputpath, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=4, default=str, ensure_ascii=False)
-    except OSError as e:
-        print(e)
+    except Exception as e:
+        logging.error(f"Failed to write results.json: {str(e)}")
+

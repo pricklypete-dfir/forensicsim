@@ -20,7 +20,7 @@ def setup_logs(output_dir):
     logging.basicConfig(
         level=logging.DEBUG,
         format="%(asctime)s - %(levelname)s - %(message)s",
-        handlers=[logging.FileHandler(debug_log, mode="w")],  # File-only logging
+        handlers=[logging.FileHandler(debug_log, mode="a")],  # File-only logging
     )
     
     error_logger = logging.getLogger("error_logger")
@@ -82,6 +82,7 @@ def process_level_db(
         end_time = time.time()
         duration = end_time - start_time
         logging.info(f"Processing completed in {duration:.2f} seconds.")
+        logging.info(f"Parsed records count: {len(extracted_values)}")
         logging.info(f"Skipped records: {skipped_records}")
         logging.info(f"Empty object stores: {empty_stores}")
 
