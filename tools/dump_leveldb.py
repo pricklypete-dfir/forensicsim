@@ -6,7 +6,8 @@ Copyright (c) 2021 Alexander Bilz
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
 in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+to
+use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 copies of the Software, and to permit persons to whom the Software is
 furnished to do so, subject to the following conditions:
 
@@ -22,23 +23,44 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
 
+import os
+import time
 from pathlib import Path
 from typing import Optional
-import os
+import traceback
 import click
-from forensicsim.backend import write_results_to_json
+import logging
+from forensicsim.backend import parse_db, write_results_to_json
 from forensicsim.consts import DUMP_HEADER
-from forensicsim.parser import parse_db
-
 
 
 def setup_logs(output_dir):
-    # Ensure output directory exists
     os.makedirs(output_dir, exist_ok=True)
+    
+    debug_log = Path(output_dir) / "debug.log"
+    raw_log = Path(output_dir) / "raw_data.json"
+    error_log = Path(output_dir) / "error.log"
+    
+    logging.basicConfig(
+        level=logging.DEBUG,  # Log all levels (DEBUG, INFO, WARNING, ERROR)
+        format="%(asctime)s - %(levelname)s - %(message)s",
+        handlers=[
+            logging.FileHandler(debug_log, mode="w"),  # Write logs to debug.log
+            logging.StreamHandler()  # Keep logs visible in terminal
+        ],
+    )
+        
+    # Error log specifically for exceptions
+    error_logger = logging.getLogger("error_logger")
+    error_handler = logging.FileHandler(error_log, mode="w")
+    error_handler.setFormatter(logging.Formatter("%(asctime)s - %(levelname)s - %(message)s"))
+    error_logger.addHandler(error_handler)
+    
     return {
         "debug_log": Path(output_dir) / "debug.log",
         "raw_log": Path(output_dir) / "raw_data.json",
         "error_log": Path(output_dir) / "error.log",
+        "error_logger": error_logger,
     }
 
 
@@ -50,13 +72,18 @@ def process_level_db(
 ) -> None:
     # Setup logs
     logs = setup_logs(output_path.parent)
-
+    error_logger = logs["error_logger"]
+    
     # Initialize log files
-    with open(logs["debug_log"], "w") as debug_log, \
-         open(logs["raw_log"], "w") as raw_log, \
-         open(logs["error_log"], "w") as error_log:
-
+    with open(logs["raw_log"], "w") as raw_log:
+        start_time = time.time()
         try:
+            logging.info(f"INFO: Starting LevelDB processing.\n")
+            logging.info(f"Input path: {input_path}\n")
+            logging.info(f"Output path: {output_path}\n")
+            logging.info(f"Blob path: {blob_path if blob_path else 'None'}\n")
+            logging.info(f"Raw dump mode: {raw_dump}\n")
+
             # Parse the database
             extracted_values = parse_db(
                 input_path,
@@ -65,21 +92,32 @@ def process_level_db(
                 raw_dump=raw_dump,
             )
 
+            logging.info(f"INFO: Database parsed successfully.\n")
+            logging.info(f"Number of records extracted: {len(extracted_values)}\n")
+            
+            logging.info(f"Skipped records: {skipped_records}")
+            logging.info(f"Empty object stores: {empty_stores}")
+
             # Handle raw_dump case
             if raw_dump:
-                # Write raw data to raw_log instead of terminal
                 for record in extracted_values:
                     raw_log.write(f"{record}\n")
+                logging.info(f"INFO: Raw records written to raw_data.json.\n")
             else:
                 # Write processed results to the output JSON file
                 write_results_to_json(extracted_values, output_path)
+                logging.info(f"INFO: Processed data written to {output_path}.\n")
 
         except Exception as e:
-            # Capture errors in the error log
-            error_log.write(f"ERROR: {str(e)}\n")
+            #error_logger.error(f"ERROR: {str(e)}\n")
+            error_logger.error(traceback.format_exc())
+            error_logger.error(f"ERROR: An exception occurred. Check error.log.\n")
 
         finally:
-            debug_log.write("Processing complete.\n")
+            end_time = time.time()
+            duration = end_time - start_time
+            logging.info(f"INFO: Processing completed.\n")
+            logging.info(f"Total time taken: {duration:.2f} seconds.\n")
 
 
 @click.command()
@@ -119,7 +157,6 @@ def process_cmd(
 ) -> None:
     click.echo(DUMP_HEADER)
     process_level_db(filepath, outputpath, blobpath, raw_dump)
-
 
 
 if __name__ == "__main__":
