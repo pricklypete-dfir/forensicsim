@@ -41,6 +41,7 @@ def parse_db(
     filepath: Path,
     blobpath: Optional[Path] = None,
     filter_db_results: Optional[bool] = True,
+    raw_dump: bool = False  # New parameter
 ) -> list[dict[str, Any]]:
     # Open raw access to a LevelDB and deserialize the records.
 
@@ -70,6 +71,12 @@ def parse_db(
                     if not hasattr(record, "origin_file") or record.origin_file is None:
                         continue
                     records_per_object_store += 1
+
+                    # Handle raw dump
+                    if raw_dump:
+                        print(f"Raw Record: {record}")
+                        continue  # Skip adding to extracted_values in raw_dump mode
+
                     # TODO: Fix None values
                     state = None
                     seq = None
