@@ -1,28 +1,3 @@
-"""
-MIT License
-
-Copyright (c) 2021 Alexander Bilz
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to
-use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
-"""
-
 import os
 import time
 from pathlib import Path
@@ -40,17 +15,14 @@ def setup_logs(output_dir):
     debug_log = Path(output_dir) / "debug.log"
     raw_log = Path(output_dir) / "raw_data.json"
     error_log = Path(output_dir) / "error.log"
-    
+
+    # Configure logging to file only
     logging.basicConfig(
-        level=logging.DEBUG,  # Log all levels (DEBUG, INFO, WARNING, ERROR)
+        level=logging.DEBUG,
         format="%(asctime)s - %(levelname)s - %(message)s",
-        handlers=[
-            logging.FileHandler(debug_log, mode="a"),  # Write logs to debug.log
-            logging.StreamHandler()  # Keep logs visible in terminal
-        ],
+        handlers=[logging.FileHandler(debug_log, mode="w")],  # File-only logging
     )
-        
-    # Error log specifically for exceptions
+    
     error_logger = logging.getLogger("error_logger")
     error_handler = logging.FileHandler(error_log, mode="w")
     error_handler.setFormatter(logging.Formatter("%(asctime)s - %(levelname)s - %(message)s"))
@@ -70,62 +42,55 @@ def process_level_db(
     blob_path: Optional[Path] = None,
     raw_dump: bool = False,
 ) -> None:
-    # Setup logs
     logs = setup_logs(output_path.parent)
     error_logger = logs["error_logger"]
-    
-    # Initialize log files
-    with open(logs["raw_log"], "w") as raw_log:
-        start_time = time.time()
-        try:
-            logging.info(f"Starting LevelDB processing.\n")
-            logging.info(f"Input path: {input_path}\n")
-            logging.info(f"Output path: {output_path}\n")
-            logging.info(f"Blob path: {blob_path if blob_path else 'None'}\n")
-            logging.info(f"Raw dump mode: {raw_dump}\n")
 
-            # Parse the database
+    start_time = time.time()
+    skipped_records = 0
+    empty_stores = 0
+
+    try:
+        logging.info("Starting LevelDB processing.")
+        logging.info(f"Input path: {input_path}")
+        logging.info(f"Output path: {output_path}")
+        logging.info(f"Blob path: {blob_path if blob_path else 'None'}")
+        logging.info(f"Raw dump mode: {raw_dump}")
+
+        with open(logs["raw_log"], "w") as raw_log:
+            # Parse database
             extracted_values = parse_db(
                 input_path,
                 blob_path,
                 filter_db_results=False,
                 raw_dump=raw_dump,
+                log_paths=logs,
             )
 
-            logging.info(f"Database parsed successfully.\n")
-            logging.info(f"Number of records extracted: {len(extracted_values)}\n")
-            
-            logging.info(f"Skipped records: {skipped_records}")
-            logging.info(f"Empty object stores: {empty_stores}")
-
-            # Handle raw_dump case
+            # Write raw dump
             if raw_dump:
                 for record in extracted_values:
                     raw_log.write(f"{record}\n")
-                logging.info(f"Raw records written to raw_data.json.\n")
+                logging.info(f"Raw records written to raw_data.json.")
             else:
-                # Write processed results to the output JSON file
                 write_results_to_json(extracted_values, output_path)
-                logging.info(f"INFO: Processed data written to {output_path}.\n")
+                logging.info(f"Processed data written to {output_path}.")
 
-        except Exception as e:
-            #error_logger.error(f"ERROR: {str(e)}\n")
-            error_logger.error(traceback.format_exc())
+    except Exception as e:
+        error_logger.error(traceback.format_exc())
 
-        finally:
-            end_time = time.time()
-            duration = end_time - start_time
-            logging.info(f"INFO: Processing completed.\n")
-            logging.info(f"Total time taken: {duration:.2f} seconds.\n")
+    finally:
+        end_time = time.time()
+        duration = end_time - start_time
+        logging.info(f"Processing completed in {duration:.2f} seconds.")
+        logging.info(f"Skipped records: {skipped_records}")
+        logging.info(f"Empty object stores: {empty_stores}")
 
 
 @click.command()
 @click.option(
     "-f",
     "--filepath",
-    type=click.Path(
-        exists=True, readable=True, writable=False, dir_okay=True, path_type=Path
-    ),
+    type=click.Path(exists=True, readable=True, writable=False, dir_okay=True, path_type=Path),
     required=True,
     help="File path to the .leveldb folder of the IndexedDB.",
 )
@@ -139,9 +104,7 @@ def process_level_db(
 @click.option(
     "-b",
     "--blobpath",
-    type=click.Path(
-        exists=True, readable=True, writable=False, dir_okay=True, path_type=Path
-    ),
+    type=click.Path(exists=True, readable=True, writable=False, dir_okay=True, path_type=Path),
     required=False,
     help="File path to the .blob folder of the IndexedDB.",
 )
