@@ -50,7 +50,6 @@ def parse_db(
     
     
     # Open raw access to a LevelDB and deserialize the records.
-
     wrapper = ccl_chromium_indexeddb.WrappedIndexDB(filepath, blobpath)
     extracted_values = []
 
@@ -58,9 +57,11 @@ def parse_db(
     record_count = 0
     skipped_records = 0
     errors = 0
-    extracted_values = []  # Initialize to avoid UnboundLocalError
 
     try:
+        if raw_dump and log_paths:
+            raw_log = open(log_paths['raw_log'], "w", encoding="utf-8")
+        
         for db_info in wrapper.database_ids:
             if db_info.dbid_no is None:
                 continue
@@ -110,6 +111,10 @@ def parse_db(
 
                         if debug_log:
                             debug_log.write(f"[DEBUG] Record {record_count} processed successfully.\n")
+                        
+                        # Write to raw_log only if raw_dump is enabled
+                        if raw_dump and raw_log:
+                            json.dump(record.value, raw_log, indent=4, default=str, ensure_ascii=False)
 
                     except Exception as e:
                         errors += 1
@@ -124,10 +129,11 @@ def parse_db(
         with open(log_paths['raw_log'], "w", encoding="utf-8") as raw_log:
             json.dump(extracted_values, raw_log, indent=4, default=str, ensure_ascii=False)
         # Final log summary
-        if debug_log:
-            debug_log.write(f"[INFO] Total records processed: {record_count}\n")
-            debug_log.write(f"[INFO] Skipped records: {skipped_records}\n")
-            debug_log.write(f"[INFO] Errors encountered: {errors}\n")
+        if log_paths:
+            with open(log_paths['debug_log'], "a", encoding="utf-8") as debug_log:
+                debug_log.write(f"[INFO] Total records processed: {record_count}\n")
+                debug_log.write(f"[INFO] Skipped records: {skipped_records}\n")
+                debug_log.write(f"[INFO] Errors encountered: {errors}\n")
 
     return extracted_values
 
